@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -9,13 +10,15 @@
 body {
     text-align: center;
     font-family: sans-serif;
+    background: #f5f0e8;
 }
 
 canvas {
-    border: 2px solid black;
-    background: white;
-    touch-action: none;
+    width: 500px;
+    height: 350px;
     max-width: 95%;
+    border: 1px solid #8b633d;
+    touch-action: none;
 }
 
 .color {
@@ -42,19 +45,14 @@ button {
 <div>
 <button class="color" style="background:black"
 onclick="setColor('black')"></button>
-
 <button class="color" style="background:yellow"
 onclick="setColor('yellow')"></button>
-
 <button class="color" style="background:blue"
 onclick="setColor('blue')"></button>
-
 <button class="color" style="background:red"
 onclick="setColor('red')"></button>
-
 <button class="color" style="background:green"
 onclick="setColor('green')"></button>
-
 <button class="color" style="background:purple"
 onclick="setColor('purple')"></button>
 
@@ -68,7 +66,7 @@ onclick="setColor('purple')"></button>
 
 <br><br>
 
-<canvas id="canvas" width="400" height="200"></canvas>
+<canvas id="canvas" width="500" height="350"></canvas>
 
 <br><br>
 
@@ -79,11 +77,9 @@ onclick="setColor('purple')"></button>
 
 <p id="status" aria-live="polite"></p>
 
-<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-// index.html と同じ接続情報を設定する
 const SUPABASE_URL = "https://yapohmzbgojtaygfceel.supabase.co";
 const SUPABASE_KEY = "sb_publishable_LzzA7XlGG4Q6qGQDpf8_mA_FZepVODX";
 
@@ -91,14 +87,65 @@ const supabaseClient = window.supabase.createClient(
     SUPABASE_URL,
     SUPABASE_KEY
 );
+
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const status = document.getElementById("status");
 const uploadButton = document.getElementById("uploadButton");
 
+// 絵を描ける範囲
+const artArea = {
+    left: 65,
+    top: 55,
+    right: 435,
+    bottom: 295
+};
+
 let drawing = false;
 let currentColor = "black";
 let currentSize = 5;
+
+// 額縁と台紙を描く
+function drawFrame() {
+    // 木製の額縁
+    const wood = ctx.createLinearGradient(0, 0, 500, 350);
+    wood.addColorStop(0, "#d9b47e");
+    wood.addColorStop(0.5, "#a87543");
+    wood.addColorStop(1, "#e2c18d");
+
+    ctx.fillStyle = wood;
+    ctx.fillRect(0, 0, 500, 350);
+
+    // 額縁の内側の縁
+    ctx.strokeStyle = "#80552f";
+    ctx.lineWidth = 5;
+    ctx.strokeRect(12, 12, 476, 326);
+
+    // 白い台紙
+    ctx.fillStyle = "#fffdf7";
+    ctx.fillRect(45, 35, 410, 280);
+
+    // 絵を描く白い部分
+    ctx.fillStyle = "white";
+    ctx.fillRect(
+        artArea.left,
+        artArea.top,
+        artArea.right - artArea.left,
+        artArea.bottom - artArea.top
+    );
+
+    // 描画範囲の細い境界線
+    ctx.strokeStyle = "#ddd5c8";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+        artArea.left,
+        artArea.top,
+        artArea.right - artArea.left,
+        artArea.bottom - artArea.top
+    );
+}
+
+drawFrame();
 
 function setColor(color) {
     currentColor = color;
@@ -110,7 +157,8 @@ function setSize(size) {
 }
 
 function setEraser() {
-    ctx.globalCompositeOperation = "destination-out";
+    currentColor = "white";
+    ctx.globalCompositeOperation = "source-over";
 }
 
 function getPosition(e) {
@@ -121,10 +169,20 @@ function getPosition(e) {
     };
 }
 
+function insideArt(p) {
+    return p.x >= artArea.left &&
+           p.x <= artArea.right &&
+           p.y >= artArea.top &&
+           p.y <= artArea.bottom;
+}
+
 canvas.addEventListener("pointerdown", function(e) {
+    const p = getPosition(e);
+    if (!insideArt(p)) return;
+
     drawing = true;
     canvas.setPointerCapture(e.pointerId);
-    const p = getPosition(e);
+
     ctx.beginPath();
     ctx.moveTo(p.x, p.y);
 });
@@ -133,6 +191,8 @@ canvas.addEventListener("pointermove", function(e) {
     if (!drawing) return;
 
     const p = getPosition(e);
+    if (!insideArt(p)) return;
+
     ctx.strokeStyle = currentColor;
     ctx.lineWidth = currentSize;
     ctx.lineCap = "round";
@@ -150,10 +210,16 @@ canvas.addEventListener("pointercancel", function() {
 });
 
 function clearCanvas() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(
+        artArea.left,
+        artArea.top,
+        artArea.right - artArea.left,
+        artArea.bottom - artArea.top
+    );
+    drawFrame();
 }
 
-// PNGをStorageにアップロードし、作品を登録する
+// PNGを保存して美術館に展示
 async function savePNG() {
     if (drawing) {
         status.textContent = "まずかいがをかきおえてね。";
@@ -164,7 +230,6 @@ async function savePNG() {
     status.textContent = "さくひんをかざっているよ……";
 
     try {
-        // 描いた絵を透明PNGに変換
         const blob = await new Promise((resolve, reject) => {
             canvas.toBlob(result => {
                 if (result) resolve(result);
@@ -172,12 +237,10 @@ async function savePNG() {
             }, "image/png");
         });
 
-        // 同じ名前にならないようにする
         const imagePath =
             "art-" + Date.now() + "-" +
             Math.random().toString(36).slice(2) + ".png";
 
-        // Storageへアップロード
         const { error: uploadError } = await supabaseClient
             .storage
             .from("art-images")
@@ -188,30 +251,29 @@ async function savePNG() {
 
         if (uploadError) throw uploadError;
 
-        // データベースに登録（16点目からは最も古い作品と入れ替え）
         const { error: rpcError } = await supabaseClient
             .rpc("add_art", {
-p_image_path: imagePath
-});
+                p_image_path: imagePath
+            });
 
         if (rpcError) throw rpcError;
 
-status.textContent = "さくひんをかざったよ！";
-uploadButton.disabled = true;
+        status.textContent = "さくひんをかざったよ！";
 
-setTimeout(() => {
-    location.href = "index.html";
-}, 1500);
+        setTimeout(() => {
+            location.href = "index.html";
+        }, 1500);
+
     } catch (error) {
         console.error(error);
         status.textContent =
             "うまくはかざれなかったよ。もういちどためしてね。";
-
     } finally {
         if (status.textContent !== "さくひんをかざったよ！") {
             uploadButton.disabled = false;
         }
-    }}
+    }
+}
 </script>
 
 </body>
